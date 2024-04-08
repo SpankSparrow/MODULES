@@ -44,6 +44,7 @@ class UIContainer(UIElement, IUIContainerInterface, IContainerLikeInterface):
         self.ui_manager = manager
         self.is_window_root_container = is_window_root_container
         self.elements = []  # type: List[IUIElementInterface]
+        self._layer = 0  # Corrected attribute name
 
         super().__init__(relative_rect, manager, container,
                          starting_height=starting_height,
@@ -64,11 +65,11 @@ class UIContainer(UIElement, IUIContainerInterface, IContainerLikeInterface):
 
         self.hovered = False
 
-
     def add(self, *sprites):
         for sprite in sprites:
-            sprite.layer = len(self.layers)
-            self.layers.append(sprite)
+            sprite.layer = len(self.elements)
+            self.elements.append(sprite)
+
 
 
 
@@ -156,23 +157,11 @@ class UIContainer(UIElement, IUIContainerInterface, IContainerLikeInterface):
             if self.ui_container is not None and self.ui_container != self:
                 self.ui_container.calc_add_element_changes_thickness(self)
 
-    def change_layer(self, new_layer: int):
-        """
-        Change the layer of this container. Layers are used by the GUI to control the order in
-        which things are drawn and which things should currently be interactive (so you can't
-        interact with things behind other things).
+    def change_layer(self, new_layer):
+        for element in self.elements:
+            element.change_layer(self._layer + element.get_starting_height())
 
-        This particular method is most often used to shift the visible contents of a window in
-        front of any others when it is moved to the front of the window stack.
 
-        :param new_layer: The layer to move our container to.
-
-        """
-        if new_layer != self._layer:
-            super().change_layer(new_layer)
-
-            for element in self.elements:
-                element.change_layer(self._layer + element.get_starting_height())
 
     def update_containing_rect_position(self):
         """
