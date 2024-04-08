@@ -167,6 +167,13 @@ class UIElement(GUISprite, IUIElementInterface):
 
         self._focus_set = {self}
 
+
+
+    def change_layer(self, new_layer):
+        self._layer = new_layer
+        self.ui_group.change_layer(self, new_layer)
+
+
     def _get_clamped_to_minimum_dimensions(self, dimensions, clamp_to_container=False):
         if self.ui_container is not None and clamp_to_container:
             dimensions = (min(self.ui_container.rect.width,
