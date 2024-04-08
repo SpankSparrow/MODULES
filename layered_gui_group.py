@@ -28,23 +28,24 @@ class GUISprite:
         if groups:
             self.add(*groups)
 
-    def add(self, *groups):
-        """add the sprite to groups
+# Add this import at the top of the module
+from collections.abc import Iterable
 
-        Sprite.add(*groups): return None
+# Modify the add method to handle iterable arguments properly
+def add(self, *args):
+    """
+    Add a sprite or iterable of sprites to the Group.
+    """
+    if len(args) == 1 and isinstance(args[0], Iterable):
+        sprites = args[0]
+    else:
+        sprites = args
 
-        Any number of Group instances can be passed as arguments. The
-        Sprite will be added to the Groups it is not already a member of.
-
-        """
-        has = self.__g.__contains__
-        for group in groups:
-            if hasattr(group, '_spritegroup'):
-                if not has(group):
-                    group.add_internal(self)
-                    self.add_internal(group)
-            else:
-                self.add(*group)
+    for sprite in sprites:
+        if sprite not in self.sprites():
+            if sprite.rect.width == 0 or sprite.rect.height == 0:
+                raise ValueError("pygame_gui.core.GUISprite.add(): Sprite has no rect area.")
+            self._sprites.append(sprite)
 
     def remove(self, *groups):
         """remove the sprite from groups
@@ -257,10 +258,12 @@ class LayeredGUIGroup(LayeredUpdates):
     def remove_internal(self, sprite):
         LayeredUpdates.remove_internal(self, sprite)
         self.should_update_visibility = True
-
+    
     def change_layer(self, sprite, new_layer):
-        LayeredUpdates.change_layer(self, sprite, new_layer)
-        self.should_update_visibility = True
+        # Check if sprite is in the group before attempting to remove it
+        if sprite in self.sprites():
+            super().change_layer(sprite, new_layer)
+
 
     def draw(self, surface):
         """draw all sprites in the right order onto the given surface
@@ -283,3 +286,12 @@ class LayeredGUIGroup(LayeredUpdates):
         self.visible = [spr.blit_data
                         for spr in self._spritelist
                         if spr.image is not None and spr.visible]
+        
+
+
+    def get_starting_height(self):
+        # Implement the logic to determine the starting height of the element
+        # For example, you might return a fixed value or calculate it dynamically
+        return 0  # Replace 0 with the appropriate starting height
+
+
