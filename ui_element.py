@@ -1,171 +1,120 @@
 import warnings
-
-from typing import List, Union, Tuple, Dict, Any, Callable, Set, Optional
-from typing import TYPE_CHECKING
+from typing import Union, Tuple, Dict, Optional, Any
 
 import pygame
+from pygame_gui.core.utility import translate
 
-from pygame_gui.core.interfaces import IUIElementInterface
+from pygame_gui.core import ObjectID
 from pygame_gui.core.interfaces import IContainerLikeInterface, IUIManagerInterface
-from pygame_gui.core.utility import render_white_text_alpha_black_bg
-from pygame_gui.core.utility import basic_blit
-from pygame_gui.core.layered_gui_group import GUISprite
-from pygame_gui.core.utility import get_default_manager
-from pygame_gui.core.object_id import ObjectID
+from pygame_gui.core.interfaces import IUITextOwnerInterface
+from pygame_gui.core.drawable_shapes import RectDrawableShape
+from pygame_gui._constants import UITextEffectType, TEXT_EFFECT_TYPING_APPEAR, TEXT_EFFECT_FADE_IN, TEXT_EFFECT_FADE_OUT
+from pygame_gui.core.text.text_effects import TypingAppearEffect, FadeInEffect, FadeOutEffect
+from pygame_gui.core.text import TextLineChunkFTFont
 
-if TYPE_CHECKING:
-    from pygame_gui.core.drawable_shapes.drawable_shape import DrawableShape
+from pygame.sprite import Sprite  # Import Sprite
 
-
-class UIElement(GUISprite, IUIElementInterface):
+class UIElement(Sprite, IUITextOwnerInterface):
     """
-    A base class for UI elements. You shouldn't create UI Element objects, instead all UI Element
-    classes should derive from this class. Inherits from pygame.sprite.Sprite.
-
-    :param relative_rect: A rectangle shape of the UI element, the position is relative to the
-                          element's container.
-    :param manager: The UIManager that manages this UIElement.
-    :param container: A container that this element is contained in.
-    :param starting_height: Used to record how many layers above it's container this element
-                            should be. Normally 1.
-    :param layer_thickness: Used to record how 'thick' this element is in layers. Normally 1.
-    :param anchors: A dictionary describing what this element's relative_rect is relative to.
-    :param visible: Whether the element is visible by default. Warning - container visibility may
-                    override this.
+    Base class for GUI elements.
     """
-    def __init__(self, relative_rect: Union[pygame.Rect, Tuple[int, int, int, int]],
-                 manager: Optional[IUIManagerInterface],
-                 container: Optional[IContainerLikeInterface],
-                 *,
-                 starting_height: int,
-                 layer_thickness: int,
-                 anchors: Dict[str, Union[str, 'UIElement']] = None,
-                 visible: int = 1):
 
-        self._layer = 0
-        self.ui_manager = manager
-        self.ui_container = None
-        if self.ui_manager is None:
-            self.ui_manager = get_default_manager()
-        if self.ui_manager is None:
-            raise ValueError("Need to create at least one UIManager to create UIElements")
+    def __init__(self, relative_rect: pygame.Rect,
+                manager: Optional[IUIManagerInterface] = None,
+                container: Optional[IContainerLikeInterface] = None,
+                parent_element: Optional['UIElement'] = None,
+                object_id: Optional[Union[ObjectID, str]] = None,
+                anchors: Optional[Dict[str, Union[str, 'UIElement']]] = None,
+                visible: int = 1,
+                starting_height: int = 1,
+                layer_thickness: int = 1,
+                *,
+                text: Optional[str] = None,
+                text_colour: Optional[pygame.Color] = None,
+                bg_colour: Optional[pygame.Color] = None,
+                manager_object_id: Optional[Union[ObjectID, str]] = None,
+                tool_tip_text: Optional[str] = None):
 
-        super().__init__(self.ui_manager.get_sprite_group())
+        # Initialize the Sprite class
+        super().__init__()  
 
-        self.minimum_dimensions = (-1, -1)
-        relative_rect.size = self._get_clamped_to_minimum_dimensions(relative_rect.size)
-
-        if isinstance(relative_rect, pygame.Rect):
-            self.relative_rect = relative_rect.copy()
-        else:
-            self.relative_rect = pygame.Rect(relative_rect)
-        self.rect = self.relative_rect.copy()
-
-        self.dynamic_width = True if self.relative_rect.width == -1 else False
-        self.dynamic_height = True if self.relative_rect.height == -1 else False
-
-        self.ui_group = self.ui_manager.get_sprite_group()
-        self.ui_theme = self.ui_manager.get_theme()
-
-        self.object_ids = None
-        self.class_ids = None
-        self.element_ids = None
-        self.combined_element_ids = None
-        self.most_specific_combined_id = 'no_id'
-
-        self.anchors = {}
-        if anchors is not None:
-            if 'center' in anchors and anchors['center'] == 'center':
-                self.anchors.update({'center': 'center'})
-            else:
-                if self._validate_horizontal_anchors(anchors):
-                    if 'left' in anchors:
-                        self.anchors['left'] = anchors['left']
-                    if 'right' in anchors:
-                        self.anchors['right'] = anchors['right']
-                    if 'centerx' in anchors:
-                        self.anchors['centerx'] = anchors['centerx']
-                else:
-                    self.anchors.update({'left': 'left'})
-
-                if self._validate_vertical_anchors(anchors):
-                    if 'top' in anchors:
-                        self.anchors['top'] = anchors['top']
-                    if 'bottom' in anchors:
-                        self.anchors['bottom'] = anchors['bottom']
-                    if 'centery' in anchors:
-                        self.anchors['centery'] = anchors['centery']
-                else:
-                    self.anchors.update({'top': 'top'})
-
-            if 'left_target' in anchors:
-                self.anchors['left_target'] = anchors['left_target']
-            if 'right_target' in anchors:
-                self.anchors['right_target'] = anchors['right_target']
-            if 'top_target' in anchors:
-                self.anchors['top_target'] = anchors['top_target']
-            if 'bottom_target' in anchors:
-                self.anchors['bottom_target'] = anchors['bottom_target']
-            if 'centerx_target' in anchors:
-                self.anchors['centerx_target'] = anchors['centerx_target']
-            if 'centery_target' in anchors:
-                self.anchors['centery_target'] = anchors['centery_target']
-        else:
-            self.anchors = {'left': 'left',
-                            'top': 'top'}
-
-        self.drawable_shape = None  # type: Union['DrawableShape', None]
-        self.image = None
-
-        if visible:
-            self.visible = 1
-        else:
-            self.visible = 0
-
-        self.blendmode = pygame.BLEND_PREMULTIPLIED
-        # self.source_rect = None
-
-        self.relative_bottom_margin = None
-        self.relative_right_margin = None
-
-        self.layer_thickness = layer_thickness
+        self.relative_rect = relative_rect
+        self.manager = manager
+        self.container = container
+        self.parent_element = parent_element
+        self.object_id = object_id
+        self.anchors = anchors
+        self.visible = visible
         self.starting_height = starting_height
+        self.layer_thickness = layer_thickness
+        self.text = text
+        self.text_colour = text_colour
+        self.bg_colour = bg_colour
+        self.manager_object_id = manager_object_id
+        self.tool_tip_text = tool_tip_text
 
-        self.is_enabled = True
+        self.drawable_shape = RectDrawableShape(self.relative_rect, self.manager.ui_theme)
+
+        self._create_valid_ids(container=container,
+                               parent_element=parent_element,
+                               object_id=object_id,
+                               element_id=None)
+
+        if self.manager is not None and self.manager_object_id is not None:
+            self.manager.register_group(self.manager_object_id, self)
+
         self.hovered = False
+
+        self.tooltip = None
+        self.is_enabled = True
+        self.ui_group = None
+
+        self._tooltip_rendered_text = None
+        self._last_colour_and_image = None
+
+        self.aligned_text_render = None
+        self.tool_tip_text_render = None
+
+        self.ui_manager = None
+
+        self.shadow_text = None
+        self.shadow_text_render = None
+
+        self.dynamic_width = self.relative_rect.width == -1
+        self.dynamic_height = self.relative_rect.height == -1
+
+        if self.dynamic_width:
+            self.dynamic_width = False
+            self.relative_rect.width = 0
+
+        if self.dynamic_height:
+            self.dynamic_height = False
+            self.relative_rect.height = 0
+
+        self.drawable_shape = RectDrawableShape(self.relative_rect, self.manager.ui_theme)
+
+        self.border_colour = None
+        self.border_width = 0
+
+        self.shape_type = 'rect'
+
+        self.image = None
+        self.tool_tip_text_surfaces = []
+        self.bg_colour = pygame.Color(0, 0, 0, 0)
         self.is_focused = False
+        self.horizontal_scroll_bar = None
+        self.vertical_scroll_bar = None
+        self.image_to_draw = None
+
+        self._update_current_size()
+
+        self.shadow = False
+        self.shadow_colour = pygame.Color('#000000')
+        self.shadow_offset = (1, 1)
+        self.shadow_width = 1
+
+        self.check_hover_time = 0.5
         self.hover_time = 0.0
-
-        self.pre_debug_image = None
-        self._pre_clipped_image = None
-
-        self._image_clip = None
-
-        self._visual_debug_mode = False
-
-        # Themed parameters
-        self.shadow_width = None  # type: Union[None, int]
-        self.border_width = None  # type: Union[None, int]
-        self.shape_corner_radius = None  # type: Union[None, int]
-
-        self.tool_tip_text = None
-        self.tool_tip_text_kwargs = None
-        self.tool_tip_object_id = None
-        self.tool_tip_delay = 1.0
-        self.tool_tip_wrap_width = None
-        self.tool_tip = None
-
-        self._setup_container(container)
-
-        self.dirty = 1
-        self.visible = 0
-        self._setup_visibility(visible)
-
-        self._update_absolute_rect_position_from_anchors()
-
-        self._update_container_clip()
-
-        self._focus_set = {self}
 
 
 
@@ -338,63 +287,16 @@ class UIElement(GUISprite, IUIElementInterface):
         """
         return self.object_ids
 
-    def _create_valid_ids(self,
-                          container: Union[IContainerLikeInterface, None],
-                          parent_element: Union[None, IUIElementInterface],
-                          object_id: Union[ObjectID, str, None],
-                          element_id: str):
+    def _create_valid_ids(self, container, parent_element, object_id, element_id):
         """
-        Creates valid id lists for an element. It will assert if users supply object IDs that
-        won't work such as those containing full stops. These ID lists are used by the theming
-        system to identify what theming parameters to apply to which element.
-
-        :param container: The container for this element. If parent is None the container will be
-                          used as the parent.
-        :param parent_element: Element that this element 'belongs to' in theming. Elements inherit
-                               colours from parents.
-        :param object_id: An optional set of IDs to help distinguish this element
-                         from other elements.
-        :param element_id: A string ID representing this element's class.
-
+        Create valid IDs for the UI element.
         """
-        id_parent: Union[IContainerLikeInterface, IUIElementInterface, None] = None
-        if parent_element is None and container is not None:
-            id_parent = container
-        elif parent_element is not None:
-            id_parent = parent_element
-
-        if isinstance(object_id, str):
-            if object_id is not None and ('.' in object_id or ' ' in object_id):
-                raise ValueError('Object ID cannot contain fullstops or spaces: ' + str(object_id))
-            obj_id = object_id
-            class_id = None
+        if object_id is None:
+            self.object_ids = []
         elif isinstance(object_id, ObjectID):
-            obj_id = object_id.object_id
-            class_id = object_id.class_id
+            self.object_ids = [object_id]
         else:
-            obj_id = None
-            class_id = None
-
-        if id_parent is not None:
-            self.element_ids = id_parent.get_element_ids().copy()
-            self.element_ids.append(element_id)
-
-            self.class_ids = id_parent.get_class_ids().copy()
-            self.class_ids.append(class_id)
-
-            self.object_ids = id_parent.get_object_ids().copy()
-            self.object_ids.append(obj_id)
-        else:
-            self.element_ids = [element_id]
-            self.class_ids = [class_id]
-            self.object_ids = [obj_id]
-
-        self.combined_element_ids = self.ui_manager.get_theme().build_all_combined_ids(
-            self.element_ids,
-            self.class_ids,
-            self.object_ids)
-
-        self.most_specific_combined_id = self.combined_element_ids[0]
+            self.object_ids = [ObjectID(id=object_id)]
 
     def _calc_top_offset(self) -> int:
         return (self.anchors['top_target'].get_abs_rect().bottom
@@ -743,17 +645,39 @@ class UIElement(GUISprite, IUIElementInterface):
             self._update_container_clip()
             self.ui_container.on_anchor_target_changed(self)
 
-    def update(self, time_delta: float):
-        """
-        Updates this element's drawable shape, if it has one.
+def update(self, time_delta: float):
+    """
+    Update the UI element.
+    """
+    if not self.is_enabled:
+        self.hovered = False
+        self._hovering(False)
+        return
 
-        :param time_delta: The time passed between frames, measured in seconds.
+    mouse_x, mouse_y = pygame.mouse.get_pos()
 
-        """
-        if self.alive() and self.drawable_shape is not None:
-            self.drawable_shape.update(time_delta)
-            if self.drawable_shape.has_fresh_surface():
-                self.on_fresh_drawable_shape_ready()
+    if self.container:
+        if self.container.rect.collidepoint(mouse_x, mouse_y):
+            mouse_x -= self.container.rect.x
+            mouse_y -= self.container.rect.y
+
+    # Update text effect if active
+    if self.active_text_effect is not None:
+        self.active_text_effect.update(time_delta)
+
+    # Call superclass update
+    super().update(time_delta)
+
+    # Check if mouse is over the element
+    if self.rect.collidepoint(mouse_x, mouse_y):
+        if not self.hovered:
+            self._hovering(True)
+            self.hovered = True
+    else:
+        if self.hovered:
+            self._hovering(False)
+            self.hovered = False
+
 
     def change_layer(self, new_layer: int):
         """
