@@ -7,7 +7,7 @@ from pygame_gui.core.utility import translate
 from pygame_gui.core import ObjectID
 from pygame_gui.core.interfaces import IContainerLikeInterface, IUIManagerInterface
 from pygame_gui.core.interfaces import IUITextOwnerInterface
-from pygame_gui.core import UIElement
+from pygame_gui.core.ui_element import UIElement  # Import UIElement
 from pygame_gui.core.drawable_shapes import RectDrawableShape
 from pygame_gui._constants import UITextEffectType, TEXT_EFFECT_TYPING_APPEAR, TEXT_EFFECT_FADE_IN, TEXT_EFFECT_FADE_OUT
 from pygame_gui.core.text.text_effects import TypingAppearEffect, FadeInEffect, FadeOutEffect
