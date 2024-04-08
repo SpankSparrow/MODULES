@@ -64,6 +64,14 @@ class UIContainer(UIElement, IUIContainerInterface, IContainerLikeInterface):
 
         self.hovered = False
 
+
+    def add(self, *sprites):
+        for sprite in sprites:
+            sprite.layer = len(self.layers)
+            self.layers.append(sprite)
+
+
+
     def get_rect(self) -> pygame.Rect:
         """
         Access to the container's rect
